@@ -4,6 +4,7 @@ local enabled = true
 local interval = 600
 local split_timer = nil
 local splitting = false
+local pending_restart = false
 local event_registered = false
 
 function script_description()
@@ -77,12 +78,8 @@ local function on_event(event)
     elseif event == obs.OBS_FRONTEND_EVENT_RECORDING_STOPPED then
         cancel_split_timer()
         if splitting then
-            local function restart()
-                obs.timer_remove(restart)
-                splitting = false
-                obs.obs_frontend_recording_start()
-            end
-            obs.timer_add(restart, 100)
+            splitting = false
+            pending_restart = true
         end
     elseif event == obs.OBS_FRONTEND_EVENT_RECORDING_PAUSED then
         cancel_split_timer()
@@ -147,6 +144,16 @@ function script_properties()
     return props
 end
 
+function script_tick(seconds)
+    if pending_restart then
+        if not obs.obs_frontend_recording_active() then
+            obs.obs_frontend_recording_start()
+        else
+            pending_restart = false
+        end
+    end
+end
+
 function script_load(settings)
     obs.obs_frontend_add_event_callback(on_event)
     event_registered = true
@@ -155,6 +162,7 @@ end
 function script_unload()
     cancel_split_timer()
     splitting = false
+    pending_restart = false
     if event_registered then
         obs.obs_frontend_remove_event_callback(on_event)
         event_registered = false
